@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="style.css"><title>El Pañol</title></head><body>
+<header id="cab"></header>
+<main class="panel">
+  <h1>Material del taller</h1>
+  <div class="filtros">
+    <input type="search" id="q" placeholder="Buscar por nombre" aria-label="Buscar por nombre">
+    <select id="estado" aria-label="Filtrar por estado">
+      <option value="">Todos</option><option value="disponible">Disponibles</option><option value="prestado">Prestados</option><option value="averiado">Averiados</option>
+    </select>
+  </div>
+  <p class="aviso" id="aviso" role="alert" hidden></p>
+  <ul class="fichas" id="lista"></ul>
+</main>
+<script src="api.js"></script>
+<script>
+montarCabecera('index.html');
+const lista = document.getElementById('lista'), aviso = document.getElementById('aviso');
+const q = document.getElementById('q'), estado = document.getElementById('estado');
+
+async function cargar() {
+  const p = new URLSearchParams();
+  if (q.value.trim()) p.set('q', q.value.trim());
+  if (estado.value) p.set('estado', estado.value);
+  try {
+    const items = await api('GET', '/materiales' + (p.toString() ? '?' + p : ''));
+    limpiar(aviso);
+    lista.innerHTML = items.length ? items.map(ficha).join('')
+      : '<li class="vacio">No hay material que coincida. Da de alta el primero en «Dar de alta».</li>';
+  } catch (e) { mostrarError(aviso, e); lista.innerHTML = ''; }
+}
+const ficha = m => `<li class="ficha ${m.estado}">
+  <div><a href="material.html?id=${m._id}">${esc(m.nombre)}</a>
+    <div class="meta"><span class="chip ${m.estado}">${m.estado}</span><span>${esc(m.categoria)}</span>
+    ${m.ubicacion ? '<span>' + esc(m.ubicacion) + '</span>' : ''}${m.prestadoA ? '<span>con ' + esc(m.prestadoA) + '</span>' : ''}</div></div>
+  <div class="botones">
+    ${m.estado === 'prestado'
+      ? '<button data-a="devolver" data-id="' + m._id + '">Devolver</button>'
+      : '<button data-a="prestar" data-id="' + m._id + '">Prestar</button>'}
+    <button class="peligro" data-a="borrar" data-id="${m._id}">Borrar</button></div></li>`;
+
+lista.onclick = async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const id = b.dataset.id;
+  try {
+    if (b.dataset.a === 'prestar') {
+      const persona = prompt('¿A quién se lo prestas?'); if (persona === null) return;
+      await api('POST', '/materiales/' + id + '/prestar', { persona });   // si persona va vacía, el backend debe responder 400
+    }
+    if (b.dataset.a === 'devolver') await api('POST', '/materiales/' + id + '/devolver');
+    if (b.dataset.a === 'borrar') { if (!confirm('¿Borrar este material?')) return; await api('DELETE', '/materiales/' + id); }
+    cargar();
+  } catch (er) { mostrarError(aviso, er); }   // el error se queda visible hasta la siguiente acción correcta
+};
+q.oninput = cargar; estado.onchange = cargar;
+cargar();
+</script></body></html>

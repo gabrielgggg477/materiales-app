@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="style.css"><title>Material</title></head><body>
+<header id="cab"></header>
+<main class="panel">
+  <h1 id="titulo-pagina">Dar de alta material</h1>
+  <!-- novalidate a propósito: queremos que sea el SERVIDOR quien valide y devuelva el error -->
+  <form id="form" novalidate>
+    <label for="nombre">Nombre <small>(único en todo el inventario)</small></label>
+    <input type="text" id="nombre" name="nombre" placeholder="Ej.: Polímetro Fluke 117">
+    <label for="categoria">Categoría</label>
+    <select id="categoria" name="categoria">
+      <option value="electronica">Electrónica</option><option value="herramienta">Herramienta</option>
+      <option value="informatica">Informática</option><option value="otro">Otro</option>
+    </select>
+    <label for="ubicacion">Ubicación <small>(opcional)</small></label>
+    <input type="text" id="ubicacion" name="ubicacion" placeholder="Ej.: armario 2, balda 3">
+    <label for="notas">Notas <small>(opcional)</small></label>
+    <textarea id="notas" name="notas" rows="3"></textarea>
+    <div id="fila-estado" hidden>
+      <label for="estado">Estado</label>
+      <select id="estado" name="estado"><option value="disponible">Disponible</option><option value="averiado">Averiado</option></select>
+    </div>
+    <p id="nota-prestado" hidden><small>Este material está prestado: para cambiar su estado, devuélvelo desde el listado.</small></p>
+    <p class="aviso" id="aviso" role="alert" hidden></p>
+    <div class="acciones"><button class="principal">Guardar material</button><a class="boton" href="index.html">Cancelar</a></div>
+  </form>
+</main>
+<script src="api.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+montarCabecera(id ? '' : 'material.html');
+const form = document.getElementById('form'), aviso = document.getElementById('aviso');
+if (id) {
+  document.getElementById('titulo-pagina').textContent = 'Editar material';
+  api('GET', '/materiales/' + id).then(m => {
+    form.nombre.value = m.nombre; form.categoria.value = m.categoria;
+    form.ubicacion.value = m.ubicacion || ''; form.notas.value = m.notas || '';
+    if (m.estado === 'prestado') document.getElementById('nota-prestado').hidden = false;
+    else { document.getElementById('fila-estado').hidden = false; form.estado.value = m.estado; }
+  }).catch(e => mostrarError(aviso, e));
+}
+form.onsubmit = async e => {
+  e.preventDefault();
+  const datos = { nombre: form.nombre.value, categoria: form.categoria.value, ubicacion: form.ubicacion.value, notas: form.notas.value };
+  if (id && !document.getElementById('fila-estado').hidden) datos.estado = form.estado.value;
+  try {
+    await api(id ? 'PUT' : 'POST', id ? '/materiales/' + id : '/materiales', datos);
+    location.href = 'index.html';
+  } catch (er) { mostrarError(aviso, er); }   // 400 (datos no válidos), 409 (nombre repetido), 404 (ya no existe)...
+};
+</script></body></html>

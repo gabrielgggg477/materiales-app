@@ -1,0 +1,52 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="style.css"><title>Comprobar backend</title></head><body>
+<header id="cab"></header>
+<main class="panel">
+  <h1>Comprobar el backend</h1>
+  <p>Esta lista es el contrato de la API: cada fila es una petición y el código que debe devolver. Pulsa el botón y verás qué has implementado ya.
+  Los errores siempre llegan como <code>{ "error": "mensaje" }</code>.</p>
+  <pre>{ "_id": "66f…", "nombre": "Polímetro Fluke 117", "categoria": "electronica",
+  "estado": "disponible", "ubicacion": "armario 2", "prestadoA": "", "notas": "" }</pre>
+  <button class="principal" id="ejecutar">Ejecutar comprobaciones</button>
+  <table><thead><tr><th>Petición</th><th>Qué debe pasar</th><th>Esperado</th><th>Obtenido</th></tr></thead><tbody id="filas"></tbody></table>
+</main>
+<script src="api.js"></script>
+<script>
+montarCabecera('contrato.html');
+const ctx = { id: null, nombre: 'Prueba ' + Date.now() }, v = x => typeof x === 'function' ? x() : x;
+const ID0 = '000000000000000000000000';
+const prestar = () => '/materiales/' + ctx.id + '/prestar', devolver = () => '/materiales/' + ctx.id + '/devolver', uno = () => '/materiales/' + ctx.id;
+const buena = () => ({ nombre: ctx.nombre, categoria: 'electronica' });
+const pasos = [
+  ['POST', '/materiales', buena, 201, 'Crea el material y devuelve el documento con su _id', r => ctx.id = r.datos && r.datos._id],
+  ['POST', '/materiales', { nombre: '', categoria: 'electronica' }, 400, 'Rechaza un nombre vacío'],
+  ['POST', '/materiales', { nombre: 'Algo raro', categoria: 'cocina' }, 400, 'Rechaza una categoría que no está en la lista'],
+  ['POST', '/materiales', buena, 409, 'Rechaza un nombre repetido (índice único; error 11000 de Mongo)'],
+  ['GET', '/materiales', null, 200, 'Devuelve el array con todo el material'],
+  ['GET', uno, null, 200, 'Devuelve un material por su id'],
+  ['GET', '/materiales/abc', null, 400, 'El id no tiene formato válido (CastError)'],
+  ['GET', '/materiales/' + ID0, null, 404, 'El id es válido pero no existe'],
+  ['PUT', uno, { notas: 'Revisado' }, 200, 'Actualiza y devuelve el material ya cambiado'],
+  ['PUT', '/materiales/' + ID0, { notas: 'x' }, 404, 'No se puede actualizar lo que no existe'],
+  ['POST', prestar, { persona: '' }, 400, 'Exige indicar a quién se presta'],
+  ['POST', prestar, { persona: 'Ana' }, 200, 'Pasa a «prestado» y guarda prestadoA'],
+  ['POST', prestar, { persona: 'Luis' }, 409, 'No se puede prestar algo que ya está prestado'],
+  ['DELETE', uno, null, 409, 'No se puede borrar material prestado'],
+  ['POST', devolver, null, 200, 'Vuelve a «disponible» y vacía prestadoA'],
+  ['POST', devolver, null, 409, 'No se puede devolver lo que no está prestado'],
+  ['DELETE', uno, null, 204, 'Borra y responde sin cuerpo'],
+  ['DELETE', uno, null, 404, 'Ya no existe']
+];
+const filas = document.getElementById('filas');
+filas.innerHTML = pasos.map((p, i) => `<tr><td><code>${p[0]} ${typeof p[1] === 'function' ? p[1]().replace(ctx.id, ':id').replace('null', ':id') : p[1].replace(ID0, ':id-inexistente')}</code></td><td>${p[4]}</td><td>${p[3]}</td><td id="r${i}">–</td></tr>`).join('');
+document.getElementById('ejecutar').onclick = async () => {
+  ctx.id = null; ctx.nombre = 'Prueba ' + Date.now();
+  for (let i = 0; i < pasos.length; i++) {
+    const [m, url, cuerpo, esperado, , despues] = pasos[i], celda = document.getElementById('r' + i), u = v(url);
+    if (u.includes('null')) { celda.textContent = 'omitido (falla el primer paso)'; continue; }
+    const r = await peticion(m, u, v(cuerpo));
+    if (despues) despues(r);
+    celda.innerHTML = r.status === esperado ? '<span class="ok">✔ ' + r.status + '</span>'
+      : '<span class="mal">✘ ' + (r.status || 'sin respuesta') + '</span>' + (r.datos && r.datos.error ? ' <small>' + esc(r.datos.error) + '</small>' : '');
+  }
+};
+</script></body></html>
